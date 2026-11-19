@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -64,6 +66,8 @@ func runIdempotent[R proto.Message](
 	ctx context.Context, s *Service, method, key string, fp []byte,
 	newResp func() R, exec func(tx store.Tx) (R, error),
 ) (resp R, replayed bool, err error) {
+	ctx, span := otel.Tracer("billing-service").Start(ctx, "idempotent."+method)
+	defer span.End()
 	err = s.store.ReadWrite(ctx, func(tx store.Tx) error {
 		resp, replayed = newResp(), false // reset: the function may be retried
 		rec, err := tx.GetIdempotency(key)
@@ -90,6 +94,7 @@ func runIdempotent[R proto.Message](
 			Key: key, Method: method, Fingerprint: fp, Response: blob, CreatedAt: s.clock().UTC(),
 		})
 	})
+	span.SetAttributes(attribute.Bool("billing.idempotent_replay", replayed))
 	if errors.Is(err, errKeyReuse) {
 		s.metrics.IdempotencyConflicts.WithLabelValues(method).Inc()
 		return resp, false, withReason(codes.FailedPrecondition, "IDEMPOTENCY_KEY_REUSED",
