@@ -1,0 +1,260 @@
+syntax = "proto3";
+
+package billing.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/Rishi-creator-11/billing-service/gen/billing/v1;billingv1";
+
+// BillingService manages customers and subscriptions and moves money through
+// an idempotent charge/refund path backed by a double-entry ledger.
+//
+// Every mutating RPC that touches money (ChargeInvoice, RefundCharge) requires
+// an idempotency_key. Retrying with the same key and the same payload returns
+// the original result; reusing a key with a different payload fails with
+// FAILED_PRECONDITION.
+service BillingService {
+  rpc CreateCustomer(CreateCustomerRequest) returns (CreateCustomerResponse) {
+    option (google.api.http) = {
+      post: "/v1/customers"
+      body: "*"
+    };
+  }
+
+  rpc CreateSubscription(CreateSubscriptionRequest) returns (CreateSubscriptionResponse) {
+    option (google.api.http) = {
+      post: "/v1/subscriptions"
+      body: "*"
+    };
+  }
+
+  rpc GetSubscription(GetSubscriptionRequest) returns (GetSubscriptionResponse) {
+    option (google.api.http) = {get: "/v1/subscriptions/{subscription_id}"};
+  }
+
+  // CancelSubscription is naturally idempotent: cancelling an already
+  // cancelled subscription returns it unchanged.
+  rpc CancelSubscription(CancelSubscriptionRequest) returns (CancelSubscriptionResponse) {
+    option (google.api.http) = {
+      post: "/v1/subscriptions/{subscription_id}:cancel"
+      body: "*"
+    };
+  }
+
+  rpc ChargeInvoice(ChargeInvoiceRequest) returns (ChargeInvoiceResponse) {
+    option (google.api.http) = {
+      post: "/v1/charges"
+      body: "*"
+    };
+  }
+
+  rpc RefundCharge(RefundChargeRequest) returns (RefundChargeResponse) {
+    option (google.api.http) = {
+      post: "/v1/charges/{charge_id}/refunds"
+      body: "*"
+    };
+  }
+
+  rpc GetLedger(GetLedgerRequest) returns (GetLedgerResponse) {
+    option (google.api.http) = {get: "/v1/customers/{customer_id}/ledger"};
+  }
+
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse) {
+    option (google.api.http) = {get: "/v1/customers/{customer_id}/balance"};
+  }
+}
+
+// Money is an amount in the currency's minor unit (for example cents for USD).
+// Floating point is never used for money.
+message Money {
+  // Amount in minor units. Must be positive in requests.
+  int64 amount_minor = 1;
+  // ISO 4217 alphabetic code, upper case (for example "USD").
+  string currency_code = 2;
+}
+
+enum BillingInterval {
+  BILLING_INTERVAL_UNSPECIFIED = 0;
+  BILLING_INTERVAL_MONTHLY = 1;
+  BILLING_INTERVAL_YEARLY = 2;
+}
+
+enum SubscriptionState {
+  SUBSCRIPTION_STATE_UNSPECIFIED = 0;
+  // Created, no successful payment yet.
+  SUBSCRIPTION_STATE_PENDING = 1;
+  SUBSCRIPTION_STATE_ACTIVE = 2;
+  // A charge was declined on an active subscription.
+  SUBSCRIPTION_STATE_PAST_DUE = 3;
+  // Terminal.
+  SUBSCRIPTION_STATE_CANCELED = 4;
+}
+
+enum ChargeStatus {
+  CHARGE_STATUS_UNSPECIFIED = 0;
+  CHARGE_STATUS_SUCCEEDED = 1;
+  CHARGE_STATUS_DECLINED = 2;
+  CHARGE_STATUS_PARTIALLY_REFUNDED = 3;
+  CHARGE_STATUS_REFUNDED = 4;
+}
+
+enum EntryDirection {
+  ENTRY_DIRECTION_UNSPECIFIED = 0;
+  ENTRY_DIRECTION_DEBIT = 1;
+  ENTRY_DIRECTION_CREDIT = 2;
+}
+
+message Customer {
+  string id = 1;
+  string email = 2;
+  string name = 3;
+  google.protobuf.Timestamp create_time = 4;
+}
+
+message Subscription {
+  string id = 1;
+  string customer_id = 2;
+  string plan_id = 3;
+  Money price = 4;
+  BillingInterval interval = 5;
+  SubscriptionState state = 6;
+  google.protobuf.Timestamp create_time = 7;
+  google.protobuf.Timestamp update_time = 8;
+  // Set when state is CANCELED.
+  google.protobuf.Timestamp cancel_time = 9;
+}
+
+message Charge {
+  string id = 1;
+  string customer_id = 2;
+  string subscription_id = 3;
+  // Caller's reference for what is being paid for.
+  string invoice_id = 4;
+  Money amount = 5;
+  ChargeStatus status = 6;
+  // Total refunded so far, in the charge currency.
+  Money refunded = 7;
+  // Set when status is DECLINED.
+  string decline_reason = 8;
+  google.protobuf.Timestamp create_time = 9;
+}
+
+message Refund {
+  string id = 1;
+  string charge_id = 2;
+  Money amount = 3;
+  string reason = 4;
+  google.protobuf.Timestamp create_time = 5;
+}
+
+message LedgerEntry {
+  string id = 1;
+  // All entries posted by one charge or refund share a transaction_id and sum to zero.
+  string transaction_id = 2;
+  string customer_id = 3;
+  string account = 4;
+  EntryDirection direction = 5;
+  Money amount = 6;
+  // The charge or refund that produced this entry.
+  string reference_id = 7;
+  google.protobuf.Timestamp create_time = 8;
+}
+
+message AccountBalance {
+  string account = 1;
+  // Debits minus credits, in minor units. Positive means net debit.
+  Money balance = 2;
+}
+
+message CreateCustomerRequest {
+  string email = 1;
+  string name = 2;
+}
+
+message CreateCustomerResponse {
+  Customer customer = 1;
+}
+
+message CreateSubscriptionRequest {
+  string customer_id = 1;
+  string plan_id = 2;
+  Money price = 3;
+  BillingInterval interval = 4;
+}
+
+message CreateSubscriptionResponse {
+  Subscription subscription = 1;
+}
+
+message GetSubscriptionRequest {
+  string subscription_id = 1;
+}
+
+message GetSubscriptionResponse {
+  Subscription subscription = 1;
+}
+
+message CancelSubscriptionRequest {
+  string subscription_id = 1;
+}
+
+message CancelSubscriptionResponse {
+  Subscription subscription = 1;
+}
+
+message ChargeInvoiceRequest {
+  // Required. 1-255 printable ASCII characters. Scope: the whole service.
+  string idempotency_key = 1;
+  string customer_id = 2;
+  string subscription_id = 3;
+  string invoice_id = 4;
+  Money amount = 5;
+  // Opaque payment method reference. The built-in simulated processor
+  // declines the value "pm_decline" and approves everything else.
+  string payment_method_id = 6;
+}
+
+message ChargeInvoiceResponse {
+  Charge charge = 1;
+  // True when this response was replayed from an earlier request with the
+  // same idempotency key; no new charge was made.
+  bool idempotent_replay = 2;
+}
+
+message RefundChargeRequest {
+  // Required. Same rules as ChargeInvoiceRequest.idempotency_key.
+  string idempotency_key = 1;
+  string charge_id = 2;
+  Money amount = 3;
+  string reason = 4;
+}
+
+message RefundChargeResponse {
+  Refund refund = 1;
+  Charge charge = 2;
+  bool idempotent_replay = 3;
+}
+
+message GetLedgerRequest {
+  string customer_id = 1;
+  // Defaults to 50, maximum 500.
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message GetLedgerResponse {
+  repeated LedgerEntry entries = 1;
+  string next_page_token = 2;
+}
+
+message GetBalanceRequest {
+  string customer_id = 1;
+}
+
+message GetBalanceResponse {
+  string customer_id = 1;
+  repeated AccountBalance balances = 2;
+  // Charges minus refunds per currency: money the customer has net paid.
+  repeated Money net_collected = 3;
+}
