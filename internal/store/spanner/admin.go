@@ -36,7 +36,7 @@ func EnsureDatabase(ctx context.Context, project, instanceID, databaseID string)
 	if err != nil {
 		return fmt.Errorf("instance admin client: %w", err)
 	}
-	defer ia.Close()
+	defer func() { _ = ia.Close() }()
 	op, err := ia.CreateInstance(ctx, &instancepb.CreateInstanceRequest{
 		Parent:     "projects/" + project,
 		InstanceId: instanceID,
@@ -57,7 +57,7 @@ func EnsureDatabase(ctx context.Context, project, instanceID, databaseID string)
 	if err != nil {
 		return fmt.Errorf("database admin client: %w", err)
 	}
-	defer da.Close()
+	defer func() { _ = da.Close() }()
 	dop, err := da.CreateDatabase(ctx, &databasepb.CreateDatabaseRequest{
 		Parent:          fmt.Sprintf("projects/%s/instances/%s", project, instanceID),
 		CreateStatement: "CREATE DATABASE `" + databaseID + "`",

@@ -137,7 +137,7 @@ func openStore(ctx context.Context, cfg Config, log *slog.Logger) (store.Store, 
 			return nil, fmt.Errorf("SPANNER_DATABASE %q must look like projects/P/instances/I/databases/D", cfg.SpannerDB)
 		}
 		log.Info("ensuring spanner instance, database and schema", "database", cfg.SpannerDB)
-		if err := spanner.EnsureDatabase(ctx, parts[1], parts[3], parts[5]); err != nil {
+		if err := ensureWithRetry(ctx, log, parts[1], parts[3], parts[5]); err != nil {
 			return nil, err
 		}
 	}
@@ -216,4 +216,20 @@ func (s *Server) Serve(ctx context.Context) error {
 	s.store.Close()
 	s.log.Info("shutdown complete")
 	return g.Wait()
+}
+
+// ensureWithRetry waits for the Spanner endpoint, which may still be starting
+// when the service container comes up.
+func ensureWithRetry(ctx context.Context, log *slog.Logger, project, instance, db string) error {
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		actx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		err := spanner.EnsureDatabase(actx, project, instance, db)
+		cancel()
+		if err == nil || time.Now().After(deadline) || ctx.Err() != nil {
+			return err
+		}
+		log.Warn("spanner not ready, retrying", "error", err)
+		time.Sleep(2 * time.Second)
+	}
 }

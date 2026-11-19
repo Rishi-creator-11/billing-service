@@ -62,7 +62,7 @@ func dial(t *testing.T, addr string) *grpc.ClientConn {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { cc.Close() })
+	t.Cleanup(func() { _ = cc.Close() })
 	return cc
 }
 
@@ -163,7 +163,7 @@ func doJSON(t *testing.T, method, url, body string, headers map[string]string) (
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var out map[string]any
 	_ = json.NewDecoder(resp.Body).Decode(&out)
 	return resp.StatusCode, out
@@ -213,7 +213,7 @@ func TestRESTGatewayAndMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 	body, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	for _, want := range []string{
 		`billing_charge_outcomes_total{outcome="succeeded"} 1`,
 		`billing_charge_outcomes_total{outcome="replayed"} 1`,
@@ -226,8 +226,13 @@ func TestRESTGatewayAndMetrics(t *testing.T) {
 			t.Errorf("metrics missing %q", want)
 		}
 	}
-	if r, _ := http.Get("http://" + a + "/readyz"); r == nil || r.StatusCode != 200 {
-		t.Fatalf("readyz not ready")
+	r, err := http.Get("http://" + a + "/readyz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = r.Body.Close()
+	if r.StatusCode != 200 {
+		t.Fatalf("readyz status %d", r.StatusCode)
 	}
 }
 

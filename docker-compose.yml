@@ -1,0 +1,57 @@
+services:
+  spanner:
+    image: gcr.io/cloud-spanner-emulator/emulator:latest
+    ports:
+      - "9010:9010" # gRPC
+      - "9020:9020" # REST
+
+  billing:
+    build: .
+    depends_on:
+      - spanner
+    environment:
+      BILLING_STORE: spanner
+      SPANNER_EMULATOR_HOST: spanner:9010
+      SPANNER_DATABASE: projects/billing-local/instances/billing/databases/billing
+      BILLING_AUTO_CREATE_DB: "true"
+      BILLING_API_KEYS: dev-local-key # local development only
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
+    ports:
+      - "50051:50051" # gRPC
+      - "8080:8080"   # REST/JSON gateway
+      - "9091:9090"   # /metrics, /healthz, /readyz
+    healthcheck:
+      test: ["CMD", "/billing-server", "healthcheck"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 5s
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - billing
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: admin # local development only
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+  jaeger:
+    image: jaegertracing/jaeger:latest
+    ports:
+      - "16686:16686" # UI

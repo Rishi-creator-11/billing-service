@@ -21,9 +21,7 @@ var _ store.Store = (*Store)(nil)
 // Open connects to the database ("projects/P/instances/I/databases/D"). When
 // SPANNER_EMULATOR_HOST is set the client talks to the emulator.
 func Open(ctx context.Context, db string) (*Store, error) {
-	c, err := spanner.NewClientWithConfig(ctx, db, spanner.ClientConfig{
-		SessionPoolConfig: spanner.SessionPoolConfig{MinOpened: 10, MaxOpened: 100},
-	})
+	c, err := spanner.NewClient(ctx, db)
 	if err != nil {
 		return nil, err
 	}

@@ -38,7 +38,7 @@ func run(addr, apiKey string, conc int, dur time.Duration, dupes, nCust int) err
 	if err != nil {
 		return err
 	}
-	defer cc.Close()
+	defer func() { _ = cc.Close() }()
 	c := billingv1.NewBillingServiceClient(cc)
 	ctx := context.Background()
 	if apiKey != "" {

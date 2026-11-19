@@ -259,13 +259,13 @@ func readOnly(t *testing.T, s store.Store) {
 func notFound(t *testing.T, s store.Store) {
 	err := s.ReadOnly(ctx(t), func(tx store.Tx) error {
 		if _, err := tx.GetCustomer("nope"); !errors.Is(err, store.ErrNotFound) {
-			return fmt.Errorf("customer: %v", err)
+			return fmt.Errorf("customer: %w", err)
 		}
 		if _, err := tx.GetSubscription("nope"); !errors.Is(err, store.ErrNotFound) {
-			return fmt.Errorf("subscription: %v", err)
+			return fmt.Errorf("subscription: %w", err)
 		}
 		if _, err := tx.GetCharge("nope"); !errors.Is(err, store.ErrNotFound) {
-			return fmt.Errorf("charge: %v", err)
+			return fmt.Errorf("charge: %w", err)
 		}
 		return nil
 	})

@@ -2,6 +2,7 @@ package memory_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -26,7 +27,7 @@ func TestLockRespectsContext(t *testing.T) {
 	defer cancel()
 	err := s.ReadWrite(ctx, func(store.Tx) error { return nil })
 	close(release)
-	if err != context.DeadlineExceeded {
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("want DeadlineExceeded, got %v", err)
 	}
 }

@@ -45,7 +45,7 @@ func run(addr, apiKey string) error {
 	if err != nil {
 		return err
 	}
-	defer cc.Close()
+	defer func() { _ = cc.Close() }()
 	c := billingv1.NewBillingServiceClient(cc)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
