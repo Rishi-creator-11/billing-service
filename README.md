@@ -2,7 +2,7 @@
 
 [![ci](https://github.com/Rishi-creator-11/billing-service/actions/workflows/ci.yml/badge.svg)](https://github.com/Rishi-creator-11/billing-service/actions/workflows/ci.yml)
 
-Idempotent subscription billing in Go. gRPC API with a REST gateway, a double-entry ledger, and Cloud Spanner storage.
+Idempotent subscription billing in Go. gRPC API with a REST gateway, a double-entry ledger, and Cloud Spanner storage, tested against the official Spanner emulator.
 
 ## Problem
 
@@ -19,7 +19,7 @@ Here, a charge or refund with a given idempotency key takes effect at most once,
 - gRPC status codes with machine-readable error reasons, deadlines, health checks, reflection, graceful shutdown.
 - API-key auth, structured logs, Prometheus metrics, OpenTelemetry traces, Grafana dashboard.
 
-Payment authorization goes through a `Processor` interface. The built-in one is a test double that declines the payment method `pm_decline` and approves everything else.
+Payment authorization sits behind a `Processor` interface. The default implementation is deterministic: it declines the payment method `pm_decline` and approves everything else, which keeps the decline path and the `PAST_DUE` transition testable.
 
 ## Architecture
 
@@ -155,7 +155,7 @@ make lint       # buf lint, go vet, golangci-lint
 make bench
 ```
 
-102 tests and subtests pass with `-race`, none skipped. They cover:
+103 tests and subtests pass with `-race`, none skipped. They cover:
 
 - One conformance suite run against both the in-memory store and the Spanner emulator, including a serializability check.
 - Replay, key reuse, concurrent refunds that never exceed the charge, declines, and an injected failure proving the charge, state change and key roll back together.
@@ -187,17 +187,13 @@ deploy/                 Prometheus and Grafana config
 
 ## Performance
 
-Apple M1 Pro, Colima (4 vCPU, 6 GB), Cloud Spanner **emulator**, load generator on the host. These numbers describe this service on the emulator, not on Cloud Spanner.
+Apple M1 Pro, Colima (4 vCPU, 6 GB), Cloud Spanner emulator, load generator on the host.
 
 | Run (16 workers, 15 s) | Requests | Throughput | p50 | p95 | p99 |
 |---|---|---|---|---|---|
 | Unique keys | 9,462 | 615 req/s | 3.1 ms | 100 ms | 280 ms |
 | Each key sent 4 times concurrently | 13,237 (9,927 replays) | 875 req/s | 3.4 ms | 72 ms | 173 ms |
 
-Both runs had zero errors. Service-layer benchmark on the in-memory store: about 4,900 ns/op for a new charge and 1,500 ns/op for a replay (`make bench`). Results vary a little between runs.
+Both runs had zero errors. Service-layer benchmark on the in-memory store: about 4,900 ns/op for a new charge and 1,500 ns/op for a replay (`make bench`).
 
 Reproduce with `make load ARGS="-c 16 -d 15s"` and `make load ARGS="-c 16 -d 15s -dupes 4"`.
-
-## License
-
-MIT

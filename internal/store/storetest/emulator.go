@@ -30,5 +30,14 @@ func NewSpanner(t *testing.T) store.Store {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
+	// Runs after the caller's own cleanups (which close the store), so each
+	// test leaves the emulator as it found it.
+	t.Cleanup(func() {
+		dctx, dcancel := context.WithTimeout(context.Background(), time.Minute)
+		defer dcancel()
+		if err := spanner.DropDatabase(dctx, "test-project", "test-instance", dbID); err != nil {
+			t.Logf("drop database %s: %v", dbID, err)
+		}
+	})
 	return s
 }

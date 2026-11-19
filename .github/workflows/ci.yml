@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       spanner:
-        image: gcr.io/cloud-spanner-emulator/emulator:latest
+        image: gcr.io/cloud-spanner-emulator/emulator@sha256:5f71fecd6330211789b75065ade9587d67b3a6b4678e7e5408e42c22f778c63e
         ports:
           - 9010:9010
     env:
@@ -54,7 +54,7 @@ jobs:
           go-version-file: go.mod
       - uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          version: v2.15.0
 
   docker:
     runs-on: ubuntu-latest

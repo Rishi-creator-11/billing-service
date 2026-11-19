@@ -71,3 +71,15 @@ func EnsureDatabase(ctx context.Context, project, instanceID, databaseID string)
 	}
 	return nil
 }
+
+// DropDatabase deletes a database. Tests use it to leave the emulator clean.
+func DropDatabase(ctx context.Context, project, instanceID, databaseID string) error {
+	da, err := database.NewDatabaseAdminClient(ctx)
+	if err != nil {
+		return fmt.Errorf("database admin client: %w", err)
+	}
+	defer func() { _ = da.Close() }()
+	return da.DropDatabase(ctx, &databasepb.DropDatabaseRequest{
+		Database: fmt.Sprintf("projects/%s/instances/%s/databases/%s", project, instanceID, databaseID),
+	})
+}

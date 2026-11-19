@@ -1,6 +1,6 @@
 services:
   spanner:
-    image: gcr.io/cloud-spanner-emulator/emulator:latest
+    image: gcr.io/cloud-spanner-emulator/emulator@sha256:5f71fecd6330211789b75065ade9587d67b3a6b4678e7e5408e42c22f778c63e
     ports:
       - "9010:9010" # gRPC
       - "9020:9020" # REST
@@ -29,7 +29,7 @@ services:
       start_period: 5s
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06
     volumes:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
@@ -38,7 +38,7 @@ services:
       - billing
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:13.3.1@sha256:0615ec4fbd4072004b7d86b46ded63013a74b7d6eb1119273dd89e8fa25c13cf
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
@@ -52,6 +52,6 @@ services:
       - prometheus
 
   jaeger:
-    image: jaegertracing/jaeger:latest
+    image: jaegertracing/jaeger@sha256:3823829974ccfc2485d2e48b165579091f32295022ae80ca49704e2f4834116e
     ports:
       - "16686:16686" # UI
