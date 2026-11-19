@@ -38,14 +38,14 @@ func forEachStore(t *testing.T, fn func(t *testing.T, st store.Store)) {
 func usd(n int64) *billingv1.Money { return &billingv1.Money{AmountMinor: n, CurrencyCode: "USD"} }
 
 type fixture struct {
-	t    *testing.T
+	t    testing.TB
 	svc  *service.Service
 	st   store.Store
 	cust *billingv1.Customer
 	sub  *billingv1.Subscription
 }
 
-func newFixture(t *testing.T, st store.Store, opts ...service.Option) *fixture {
+func newFixture(t testing.TB, st store.Store, opts ...service.Option) *fixture {
 	t.Helper()
 	svc := service.New(st, opts...)
 	ctx := context.Background()
