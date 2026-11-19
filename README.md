@@ -326,4 +326,4 @@ throughput=1014 req/s
 latency p50=2.82ms p95=63.38ms p99=145.53ms max=1.01373s
 ```
 
-In the second run 11,434 of 15,246 requests were replays (exactly three quarters), so each key was charged once and answered from the stored record the other three times. The emulator runs read-write transactions with limited concurrency, which accounts for the long tail on writes.
+In the second run 11,434 of 15,246 requests were replays (about three quarters, as expected), so each key was charged once and answered from the stored record the other three times.
