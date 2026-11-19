@@ -36,7 +36,7 @@ proto-lint: ## lint the protobuf contract
 	buf lint
 
 proto-breaking: ## check for breaking API changes against main
-	buf breaking --against '.git#branch=main,subdir=proto' || true
+	buf breaking --against '.git#branch=main,subdir=proto'
 
 lint: proto-lint ## buf lint, go vet and golangci-lint
 	go vet ./...
