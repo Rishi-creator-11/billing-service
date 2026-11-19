@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -112,12 +113,27 @@ func Logging(log *slog.Logger) grpc.UnaryServerInterceptor {
 		if p, ok := peer.FromContext(ctx); ok {
 			attrs = append(attrs, "peer", p.Addr.String())
 		}
-		if err != nil && level == slog.LevelInfo {
-			attrs = append(attrs, "error", status.Convert(err).Message())
+		// Free-text status messages can echo caller-supplied values such as
+		// emails, so only the machine-readable reason is logged.
+		if reason := errorReason(err); reason != "" {
+			attrs = append(attrs, "reason", reason)
 		}
 		log.Log(ctx, level, "rpc", attrs...)
 		return resp, err
 	}
+}
+
+// errorReason returns the ErrorInfo reason attached to err, or "".
+func errorReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	for _, d := range status.Convert(err).Details() {
+		if info, ok := d.(*errdetails.ErrorInfo); ok {
+			return info.GetReason()
+		}
+	}
+	return ""
 }
 
 // Metrics records request counts, latency and in-flight gauge.

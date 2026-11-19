@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -96,4 +97,20 @@ func TestDefaultDeadline(t *testing.T) {
 		}
 		return nil, nil
 	})
+}
+
+func TestLoggingOmitsErrorMessage(t *testing.T) {
+	var buf strings.Builder
+	log := slog.New(slog.NewJSONHandler(&buf, nil))
+	st, _ := status.New(codes.AlreadyExists, "customer jane@example.com already exists").
+		WithDetails(&errdetails.ErrorInfo{Reason: "CUSTOMER_EXISTS", Domain: "billing.v1"})
+	_, _ = Logging(log)(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "/x/y"},
+		func(context.Context, any) (any, error) { return nil, st.Err() })
+	out := buf.String()
+	if strings.Contains(out, "jane@example.com") {
+		t.Fatalf("PII leaked into log: %s", out)
+	}
+	if !strings.Contains(out, "CUSTOMER_EXISTS") || !strings.Contains(out, "AlreadyExists") {
+		t.Fatalf("code/reason missing: %s", out)
+	}
 }
