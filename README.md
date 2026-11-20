@@ -12,7 +12,7 @@ Here, a charge or refund with a given idempotency key takes effect at most once,
 
 ## Features
 
-- Customers and subscriptions with a validated state machine.
+- Customers and subscriptions, each with its own gRPC service and full CRUD, plus a validated subscription state machine.
 - `ChargeInvoice` and `RefundCharge` (partial refunds), both requiring an `idempotency_key`.
 - Double-entry ledger: each charge and refund posts a debit and a credit that sum to zero.
 - Money as integer minor units plus an ISO 4217 code. No floats.
@@ -42,18 +42,37 @@ The REST gateway calls the gRPC server over loopback, so both protocols share th
 
 ## API
 
-Contract: [`proto/billing/v1/billing.proto`](proto/billing/v1/billing.proto).
+Contract: [`proto/billing/v1/billing.proto`](proto/billing/v1/billing.proto). Three gRPC services share one REST gateway.
 
-| RPC | REST |
-|---|---|
-| `CreateCustomer` | `POST /v1/customers` |
-| `CreateSubscription` | `POST /v1/subscriptions` |
-| `GetSubscription` | `GET /v1/subscriptions/{id}` |
-| `CancelSubscription` | `POST /v1/subscriptions/{id}:cancel` |
-| `ChargeInvoice` | `POST /v1/charges` |
-| `RefundCharge` | `POST /v1/charges/{id}/refunds` |
-| `GetLedger` | `GET /v1/customers/{id}/ledger` |
-| `GetBalance` | `GET /v1/customers/{id}/balance` |
+| Service | RPC | REST |
+|---|---|---|
+| `CustomerService` | `CreateCustomer` | `POST /v1/customers` |
+| | `GetCustomer` | `GET /v1/customers/{id}` |
+| | `UpdateCustomer` | `PATCH /v1/customers/{id}` |
+| | `DeleteCustomer` | `DELETE /v1/customers/{id}` |
+| | `ListCustomers` | `GET /v1/customers?page_size=&page_token=` |
+| `SubscriptionService` | `CreateSubscription` | `POST /v1/subscriptions` |
+| | `GetSubscription` | `GET /v1/subscriptions/{id}` |
+| | `UpdateSubscription` | `PATCH /v1/subscriptions/{id}` |
+| | `ListSubscriptions` | `GET /v1/subscriptions?customer_id=&page_size=&page_token=` |
+| | `CancelSubscription` | `POST /v1/subscriptions/{id}:cancel` |
+| `BillingService` | `ChargeInvoice` | `POST /v1/charges` |
+| | `RefundCharge` | `POST /v1/charges/{id}/refunds` |
+| | `GetLedger` | `GET /v1/customers/{id}/ledger` |
+| | `GetBalance` | `GET /v1/customers/{id}/balance` |
+
+### CRUD and custom RPCs
+
+Customers and subscriptions are plain entities with create, get, update, delete (customers) and list. Everything that moves money or changes subscription state is a custom RPC, because it is not a field edit:
+
+- `ChargeInvoice` and `RefundCharge` are idempotent, post ledger entries, and drive the subscription state machine. `GetLedger` and `GetBalance` read the ledger.
+- `CancelSubscription` is the only direct state transition.
+- `UpdateSubscription` edits `plan_id` and `metadata` only, and is rejected on a canceled subscription. Price, interval and state are not editable.
+- `UpdateCustomer` edits `name` and `email`. A duplicate email returns `ALREADY_EXISTS` (`CUSTOMER_EXISTS`).
+- `DeleteCustomer` is refused with `FAILED_PRECONDITION` (`CUSTOMER_HAS_ACTIVITY`) when the customer has any subscription, in any state, or any ledger entry. The ledger is append-only and must keep pointing at a customer, so only a customer with no history can be deleted. The check and the delete run in one transaction.
+- Updates take an `update_mask` naming the fields to change; an empty or unknown mask is `INVALID_ARGUMENT`. In JSON the mask is a comma-separated string in lowerCamelCase, for example `{"plan_id": "team", "update_mask": "planId"}`.
+- Lists are ordered oldest first with `page_size` (default 50, max 500) and an opaque `page_token`; an empty `next_page_token` marks the last page.
+- `BillingService` still exposes `CreateCustomer`, `CreateSubscription`, `GetSubscription` and `CancelSubscription` for existing clients. They behave exactly like the same-named RPCs on the entity services, and their REST routes are unchanged.
 
 Auth: `authorization: Bearer <key>` or `x-api-key: <key>`. The local stack uses `dev-local-key`.
 
@@ -125,7 +144,7 @@ Requires Docker with Compose. Go is needed for `make demo` and tests.
 
 ```console
 make up      # Spanner emulator, service, Prometheus, Grafana, Jaeger
-make demo    # walk through the API
+make demo    # walk through CRUD, then charges, retries and refunds
 make down    # stop and delete everything
 ```
 
@@ -155,11 +174,12 @@ make lint       # buf lint, go vet, golangci-lint
 make bench
 ```
 
-103 tests and subtests pass with `-race`, none skipped. They cover:
+176 tests and subtests pass with `-race`, none skipped. They cover:
 
 - One conformance suite run against both the in-memory store and the Spanner emulator, including a serializability check.
 - Replay, key reuse, concurrent refunds that never exceed the charge, declines, and an injected failure proving the charge, state change and key roll back together.
 - 50 parallel duplicate requests producing exactly one charge and two ledger entries.
+- CRUD for both entities at the store, service, gRPC and REST levels: not-found, validation, update masks, pagination, duplicate emails and delete protection.
 - A ledger invariant asserted after every scenario: entries sum to zero.
 - End-to-end tests of gRPC, REST, auth, health, reflection, `/metrics` and graceful shutdown.
 

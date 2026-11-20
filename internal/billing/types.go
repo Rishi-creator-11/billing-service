@@ -92,6 +92,7 @@ type Subscription struct {
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 	CanceledAt *time.Time
+	Metadata   map[string]string
 }
 
 type Charge struct {

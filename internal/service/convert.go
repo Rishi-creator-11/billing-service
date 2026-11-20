@@ -1,6 +1,7 @@
 package service
 
 import (
+	"maps"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -50,6 +51,9 @@ func subscriptionPB(s billing.Subscription) *billingv1.Subscription {
 	}
 	if s.CanceledAt != nil {
 		out.CancelTime = ts(*s.CanceledAt)
+	}
+	if len(s.Metadata) > 0 {
+		out.Metadata = maps.Clone(s.Metadata)
 	}
 	return out
 }

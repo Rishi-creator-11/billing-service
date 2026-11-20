@@ -23,6 +23,13 @@ type LedgerCursor struct {
 	EntryID   string
 }
 
+// ListCursor identifies the last row of a page of customers or subscriptions;
+// listing resumes after it. Both are ordered by (created_at, id).
+type ListCursor struct {
+	CreatedAt time.Time
+	ID        string
+}
+
 // AccountBalance is the signed sum (debits positive) of one account/currency.
 type AccountBalance struct {
 	Account  string
@@ -38,10 +45,25 @@ type AccountBalance struct {
 type Tx interface {
 	CreateCustomer(c billing.Customer) error // ErrAlreadyExists on duplicate id or email
 	GetCustomer(id string) (billing.Customer, error)
+	// UpdateCustomer replaces the mutable fields (email, name). ErrNotFound if
+	// the customer does not exist, ErrAlreadyExists if the email belongs to
+	// another customer.
+	UpdateCustomer(c billing.Customer) error
+	// DeleteCustomer removes the customer and frees its email. ErrNotFound if
+	// absent. It does not check for dependants; the service does that inside
+	// the same transaction.
+	DeleteCustomer(id string) error
+	// ListCustomers returns up to limit customers ordered by (created_at, id),
+	// strictly after the cursor when it is non-nil.
+	ListCustomers(after *ListCursor, limit int) ([]billing.Customer, error)
 
 	CreateSubscription(s billing.Subscription) error
 	GetSubscription(id string) (billing.Subscription, error)
-	UpdateSubscription(s billing.Subscription) error
+	UpdateSubscription(s billing.Subscription) error // ErrNotFound if absent
+	// ListSubscriptions returns up to limit subscriptions ordered by
+	// (created_at, id), strictly after the cursor when it is non-nil. An empty
+	// customerID lists every customer's subscriptions.
+	ListSubscriptions(customerID string, after *ListCursor, limit int) ([]billing.Subscription, error)
 
 	CreateCharge(c billing.Charge) error
 	GetCharge(id string) (billing.Charge, error)

@@ -3,9 +3,12 @@ package spanner
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 
 	"cloud.google.com/go/spanner"
+	"github.com/googleapis/gax-go/v2/apierror"
 	"google.golang.org/grpc/codes"
 
 	"github.com/Rishi-creator-11/billing-service/internal/billing"
@@ -54,6 +57,12 @@ func (s *Store) ReadOnly(ctx context.Context, fn func(store.Tx) error) error {
 func mapErr(err error) error {
 	if err == nil {
 		return nil
+	}
+	// Errors returned by the transaction callback (already gRPC statuses from
+	// the service) pass through; only errors raised by Spanner are translated.
+	var apiErr *apierror.APIError
+	if !errors.As(err, &apiErr) {
+		return err
 	}
 	switch spanner.ErrCode(err) {
 	case codes.AlreadyExists:
@@ -105,35 +114,72 @@ func (t *tx) GetCustomer(id string) (billing.Customer, error) {
 	return c, err
 }
 
+func (t *tx) UpdateCustomer(c billing.Customer) error {
+	return t.write(spanner.Update("Customers", customerCols, []any{c.ID, c.Email, c.Name, c.CreatedAt}))
+}
+
+// DeleteCustomer reads the row first because a Spanner delete of a missing key
+// succeeds silently.
+func (t *tx) DeleteCustomer(id string) error {
+	if _, err := t.row("Customers", id, []string{"customer_id"}); err != nil {
+		return err
+	}
+	return t.write(spanner.Delete("Customers", spanner.Key{id}))
+}
+
+func (t *tx) ListCustomers(after *store.ListCursor, limit int) ([]billing.Customer, error) {
+	sql := "SELECT customer_id, email, name, create_time FROM Customers"
+	params := map[string]any{}
+	if after != nil {
+		sql += " WHERE (create_time > @t OR (create_time = @t AND customer_id > @id))"
+		params["t"], params["id"] = after.CreatedAt, after.ID
+	}
+	sql += " ORDER BY create_time, customer_id"
+	if limit > 0 {
+		sql += " LIMIT @n"
+		params["n"] = int64(limit)
+	}
+	var out []billing.Customer
+	err := t.r.Query(t.ctx, spanner.Statement{SQL: sql, Params: params}).Do(func(row *spanner.Row) error {
+		var c billing.Customer
+		if err := row.Columns(&c.ID, &c.Email, &c.Name, &c.CreatedAt); err != nil {
+			return err
+		}
+		out = append(out, c)
+		return nil
+	})
+	return out, err
+}
+
 // ---- subscriptions
 
-var subCols = []string{"subscription_id", "customer_id", "plan_id", "price_minor", "currency", "billing_interval", "state", "create_time", "update_time", "cancel_time"}
+var subCols = []string{"subscription_id", "customer_id", "plan_id", "price_minor", "currency", "billing_interval", "state", "create_time", "update_time", "cancel_time", "metadata"}
 
-func subVals(s billing.Subscription) []any {
+const subSelect = "SELECT subscription_id, customer_id, plan_id, price_minor, currency, billing_interval, state, create_time, update_time, cancel_time, metadata FROM Subscriptions"
+
+func subVals(s billing.Subscription) ([]any, error) {
 	var cancel spanner.NullTime
 	if s.CanceledAt != nil {
 		cancel = spanner.NullTime{Time: *s.CanceledAt, Valid: true}
 	}
-	return []any{s.ID, s.CustomerID, s.PlanID, s.Price.AmountMinor, s.Price.Currency, string(s.Interval), string(s.State), s.CreatedAt, s.UpdatedAt, cancel}
-}
-
-func (t *tx) CreateSubscription(s billing.Subscription) error {
-	return t.write(spanner.Insert("Subscriptions", subCols, subVals(s)))
-}
-
-func (t *tx) UpdateSubscription(s billing.Subscription) error {
-	return t.write(spanner.Update("Subscriptions", subCols, subVals(s)))
-}
-
-func (t *tx) GetSubscription(id string) (billing.Subscription, error) {
-	var s billing.Subscription
-	row, err := t.row("Subscriptions", id, subCols)
-	if err != nil {
-		return s, err
+	var meta spanner.NullString
+	if len(s.Metadata) > 0 {
+		b, err := json.Marshal(s.Metadata)
+		if err != nil {
+			return nil, err
+		}
+		meta = spanner.NullString{StringVal: string(b), Valid: true}
 	}
+	return []any{s.ID, s.CustomerID, s.PlanID, s.Price.AmountMinor, s.Price.Currency, string(s.Interval), string(s.State), s.CreatedAt, s.UpdatedAt, cancel, meta}, nil
+}
+
+// scanSub reads the columns of subCols in order.
+func scanSub(row *spanner.Row) (billing.Subscription, error) {
+	var s billing.Subscription
 	var interval, state string
 	var cancel spanner.NullTime
-	if err := row.Columns(&s.ID, &s.CustomerID, &s.PlanID, &s.Price.AmountMinor, &s.Price.Currency, &interval, &state, &s.CreatedAt, &s.UpdatedAt, &cancel); err != nil {
+	var meta spanner.NullString
+	if err := row.Columns(&s.ID, &s.CustomerID, &s.PlanID, &s.Price.AmountMinor, &s.Price.Currency, &interval, &state, &s.CreatedAt, &s.UpdatedAt, &cancel, &meta); err != nil {
 		return s, err
 	}
 	s.Interval, s.State = billing.Interval(interval), billing.SubscriptionState(state)
@@ -141,7 +187,69 @@ func (t *tx) GetSubscription(id string) (billing.Subscription, error) {
 		ct := cancel.Time
 		s.CanceledAt = &ct
 	}
+	if meta.Valid {
+		if err := json.Unmarshal([]byte(meta.StringVal), &s.Metadata); err != nil {
+			return s, err
+		}
+	}
 	return s, nil
+}
+
+func (t *tx) CreateSubscription(s billing.Subscription) error {
+	vals, err := subVals(s)
+	if err != nil {
+		return err
+	}
+	return t.write(spanner.Insert("Subscriptions", subCols, vals))
+}
+
+func (t *tx) UpdateSubscription(s billing.Subscription) error {
+	vals, err := subVals(s)
+	if err != nil {
+		return err
+	}
+	return t.write(spanner.Update("Subscriptions", subCols, vals))
+}
+
+func (t *tx) GetSubscription(id string) (billing.Subscription, error) {
+	row, err := t.row("Subscriptions", id, subCols)
+	if err != nil {
+		return billing.Subscription{}, err
+	}
+	return scanSub(row)
+}
+
+func (t *tx) ListSubscriptions(customerID string, after *store.ListCursor, limit int) ([]billing.Subscription, error) {
+	sql := subSelect
+	params := map[string]any{}
+	var where []string
+	if customerID != "" {
+		sql = strings.Replace(sql, "FROM Subscriptions", "FROM Subscriptions@{FORCE_INDEX=SubscriptionsByCustomer}", 1)
+		where = append(where, "customer_id = @c")
+		params["c"] = customerID
+	}
+	if after != nil {
+		where = append(where, "(create_time > @t OR (create_time = @t AND subscription_id > @id))")
+		params["t"], params["id"] = after.CreatedAt, after.ID
+	}
+	if len(where) > 0 {
+		sql += " WHERE " + strings.Join(where, " AND ")
+	}
+	sql += " ORDER BY create_time, subscription_id"
+	if limit > 0 {
+		sql += " LIMIT @n"
+		params["n"] = int64(limit)
+	}
+	var out []billing.Subscription
+	err := t.r.Query(t.ctx, spanner.Statement{SQL: sql, Params: params}).Do(func(row *spanner.Row) error {
+		s, err := scanSub(row)
+		if err != nil {
+			return err
+		}
+		out = append(out, s)
+		return nil
+	})
+	return out, err
 }
 
 // ---- charges

@@ -1,6 +1,6 @@
 // Command demo walks through the billing API against a running server:
-// create a customer, subscribe, charge, retry with the same key, race
-// duplicates, refund, and inspect the ledger.
+// customer and subscription CRUD, delete protection, then charge, retry with
+// the same key, race duplicates, refund, and inspect the ledger.
 package main
 
 import (
@@ -12,11 +12,13 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	billingv1 "github.com/Rishi-creator-11/billing-service/gen/billing/v1"
 )
@@ -31,7 +33,12 @@ func main() {
 	}
 }
 
-func step(n int, title string) { fmt.Printf("\n== %d. %s\n", n, title) }
+var stepNo int
+
+func step(title string) {
+	stepNo++
+	fmt.Printf("\n== %d. %s\n", stepNo, title)
+}
 
 func show(label string, m proto.Message) {
 	b, _ := protojson.MarshalOptions{Multiline: true, Indent: "  ", UseProtoNames: true}.Marshal(m)
@@ -47,6 +54,8 @@ func run(addr, apiKey string) error {
 	}
 	defer func() { _ = cc.Close() }()
 	c := billingv1.NewBillingServiceClient(cc)
+	customers := billingv1.NewCustomerServiceClient(cc)
+	subscriptions := billingv1.NewSubscriptionServiceClient(cc)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	if apiKey != "" {
@@ -54,33 +63,65 @@ func run(addr, apiKey string) error {
 	}
 	run := fmt.Sprint(time.Now().UnixNano()) // makes keys and emails unique per demo run
 
-	step(1, "Create a customer")
-	cust, err := c.CreateCustomer(ctx, &billingv1.CreateCustomerRequest{Email: "demo-" + run + "@example.com", Name: "Demo Customer"})
+	step("Create a customer")
+	cust, err := customers.CreateCustomer(ctx, &billingv1.CreateCustomerRequest{Email: "demo-" + run + "@example.com", Name: "Demo Customer"})
 	if err != nil {
 		return err
 	}
 	show("customer:", cust.Customer)
 
-	step(2, "Subscribe to a $19.99/month plan")
-	sub, err := c.CreateSubscription(ctx, &billingv1.CreateSubscriptionRequest{
+	step("Read, rename and list customers")
+	got, err := customers.GetCustomer(ctx, &billingv1.GetCustomerRequest{CustomerId: cust.Customer.Id})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("get: %s <%s>\n", got.Customer.Name, got.Customer.Email)
+	renamed, err := customers.UpdateCustomer(ctx, &billingv1.UpdateCustomerRequest{
+		CustomerId: cust.Customer.Id, Name: "Demo Customer (renamed)", UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"name"}}})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("update: name is now %q, email unchanged: %v\n", renamed.Customer.Name, renamed.Customer.Email == got.Customer.Email)
+	page, err := customers.ListCustomers(ctx, &billingv1.ListCustomersRequest{PageSize: 100})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("list: %d customer(s) on the first page\n", len(page.Customers))
+
+	step("Subscribe to a $19.99/month plan")
+	sub, err := subscriptions.CreateSubscription(ctx, &billingv1.CreateSubscriptionRequest{
 		CustomerId: cust.Customer.Id, PlanId: "pro-monthly", Price: usd(1999), Interval: billingv1.BillingInterval_BILLING_INTERVAL_MONTHLY})
 	if err != nil {
 		return err
 	}
 	fmt.Println("subscription state:", sub.Subscription.State)
 
+	step("Update the subscription's plan and metadata, then list the customer's subscriptions")
+	upd, err := subscriptions.UpdateSubscription(ctx, &billingv1.UpdateSubscriptionRequest{
+		SubscriptionId: sub.Subscription.Id, PlanId: "pro-monthly-v2", Metadata: map[string]string{"source": "demo"},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"plan_id", "metadata"}}})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("plan=%s metadata=%v state=%s (state is not editable)\n", upd.Subscription.PlanId, upd.Subscription.Metadata, upd.Subscription.State)
+	subs, err := subscriptions.ListSubscriptions(ctx, &billingv1.ListSubscriptionsRequest{CustomerId: cust.Customer.Id})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("list: %d subscription(s) for this customer\n", len(subs.Subscriptions))
+
 	charge := &billingv1.ChargeInvoiceRequest{
 		IdempotencyKey: "demo-" + run + "-invoice-1", CustomerId: cust.Customer.Id, SubscriptionId: sub.Subscription.Id,
 		InvoiceId: "inv-1001", Amount: usd(1999), PaymentMethodId: "pm_card_visa"}
 
-	step(3, "Charge the first invoice")
+	step("Charge the first invoice")
 	first, err := c.ChargeInvoice(ctx, charge)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("charge %s status=%s idempotent_replay=%v\n", first.Charge.Id, first.Charge.Status, first.IdempotentReplay)
 
-	step(4, "Client times out and retries with the SAME key")
+	step("Client times out and retries with the SAME key")
 	retry, err := c.ChargeInvoice(ctx, charge)
 	if err != nil {
 		return err
@@ -91,13 +132,13 @@ func run(addr, apiKey string) error {
 	}
 	fmt.Println("same charge id returned: no second charge")
 
-	step(5, "Same key, different amount is rejected")
+	step("Same key, different amount is rejected")
 	conflict := proto.Clone(charge).(*billingv1.ChargeInvoiceRequest)
 	conflict.Amount = usd(9999)
 	_, err = c.ChargeInvoice(ctx, conflict)
 	fmt.Printf("code=%s message=%q\n", status.Code(err), status.Convert(err).Message())
 
-	step(6, "50 concurrent requests with one new key")
+	step("50 concurrent requests with one new key")
 	race := proto.Clone(charge).(*billingv1.ChargeInvoiceRequest)
 	race.IdempotencyKey, race.InvoiceId = "demo-"+run+"-invoice-2", "inv-1002"
 	const n = 50
@@ -131,7 +172,7 @@ func run(addr, apiKey string) error {
 		raceChargeID = id
 	}
 
-	step(7, "Partially refund the second charge ($5.00), then retry the refund")
+	step("Partially refund the second charge ($5.00), then retry the refund")
 	rf := &billingv1.RefundChargeRequest{IdempotencyKey: "demo-" + run + "-refund-1", ChargeId: raceChargeID, Amount: usd(500), Reason: "goodwill credit"}
 	r1, err := c.RefundCharge(ctx, rf)
 	if err != nil {
@@ -144,7 +185,7 @@ func run(addr, apiKey string) error {
 	fmt.Printf("refund %s charge status=%s refunded=%d\n", r1.Refund.Id, r1.Charge.Status, r1.Charge.Refunded.AmountMinor)
 	fmt.Printf("retry  %s idempotent_replay=%v (same refund id: %v)\n", r2.Refund.Id, r2.IdempotentReplay, r1.Refund.Id == r2.Refund.Id)
 
-	step(8, "Ledger")
+	step("Ledger")
 	led, err := c.GetLedger(ctx, &billingv1.GetLedgerRequest{CustomerId: cust.Customer.Id})
 	if err != nil {
 		return err
@@ -164,7 +205,7 @@ func run(addr, apiKey string) error {
 		return fmt.Errorf("unexpected ledger: %d entries, sum %d", len(led.Entries), sum)
 	}
 
-	step(9, "Balance")
+	step("Balance")
 	bal, err := c.GetBalance(ctx, &billingv1.GetBalanceRequest{CustomerId: cust.Customer.Id})
 	if err != nil {
 		return err
@@ -174,6 +215,26 @@ func run(addr, apiKey string) error {
 	if bal.NetCollected[0].AmountMinor != 3498 {
 		return fmt.Errorf("net collected %d, want 3498", bal.NetCollected[0].AmountMinor)
 	}
-	fmt.Println("\ndemo complete: 2 charges and 1 refund were applied exactly once")
+
+	step("Delete protection")
+	_, err = customers.DeleteCustomer(ctx, &billingv1.DeleteCustomerRequest{CustomerId: cust.Customer.Id})
+	if status.Code(err) != codes.FailedPrecondition {
+		return fmt.Errorf("deleting a customer with subscriptions and ledger entries returned %w, want FAILED_PRECONDITION", err)
+	}
+	fmt.Printf("delete of the billed customer: code=%s message=%q\n", status.Code(err), status.Convert(err).Message())
+	spare, err := customers.CreateCustomer(ctx, &billingv1.CreateCustomerRequest{Email: "spare-" + run + "@example.com"})
+	if err != nil {
+		return err
+	}
+	if _, err := customers.DeleteCustomer(ctx, &billingv1.DeleteCustomerRequest{CustomerId: spare.Customer.Id}); err != nil {
+		return err
+	}
+	_, err = customers.GetCustomer(ctx, &billingv1.GetCustomerRequest{CustomerId: spare.Customer.Id})
+	if status.Code(err) != codes.NotFound {
+		return fmt.Errorf("deleted customer still readable: %w", err)
+	}
+	fmt.Println("delete of an unused customer: removed, and a get now returns NOT_FOUND")
+
+	fmt.Println("\ndemo complete: customer and subscription CRUD worked; 2 charges and 1 refund were applied exactly once")
 	return nil
 }

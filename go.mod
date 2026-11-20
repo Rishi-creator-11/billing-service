@@ -5,6 +5,7 @@ go 1.27.4
 require (
 	cloud.google.com/go/spanner v1.96.1
 	github.com/google/uuid v1.6.0
+	github.com/googleapis/gax-go/v2 v2.26.2
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.34.0
 	github.com/prometheus/client_golang v1.25.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.72.0
@@ -41,7 +42,6 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.17 // indirect
-	github.com/googleapis/gax-go/v2 v2.26.2 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect

@@ -3,18 +3,18 @@ syntax = "proto3";
 package billing.v1;
 
 import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/Rishi-creator-11/billing-service/gen/billing/v1;billingv1";
 
-// BillingService manages customers and subscriptions and moves money through
-// an idempotent charge/refund path backed by a double-entry ledger.
+// CustomerService is the CRUD surface for customers.
 //
-// Every mutating RPC that touches money (ChargeInvoice, RefundCharge) requires
-// an idempotency_key. Retrying with the same key and the same payload returns
-// the original result; reusing a key with a different payload fails with
-// FAILED_PRECONDITION.
-service BillingService {
+// Delete is protected: a customer that has any subscription or ledger entry
+// cannot be deleted (FAILED_PRECONDITION, reason CUSTOMER_HAS_ACTIVITY), because
+// the ledger is append-only and must keep pointing at a customer.
+service CustomerService {
+  // buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
   rpc CreateCustomer(CreateCustomerRequest) returns (CreateCustomerResponse) {
     option (google.api.http) = {
       post: "/v1/customers"
@@ -22,6 +22,34 @@ service BillingService {
     };
   }
 
+  rpc GetCustomer(GetCustomerRequest) returns (GetCustomerResponse) {
+    option (google.api.http) = {get: "/v1/customers/{customer_id}"};
+  }
+
+  // UpdateCustomer changes the fields named in update_mask ("name", "email").
+  rpc UpdateCustomer(UpdateCustomerRequest) returns (UpdateCustomerResponse) {
+    option (google.api.http) = {
+      patch: "/v1/customers/{customer_id}"
+      body: "*"
+    };
+  }
+
+  // DeleteCustomer removes a customer that has no subscriptions and no ledger
+  // entries. Otherwise it fails with FAILED_PRECONDITION.
+  rpc DeleteCustomer(DeleteCustomerRequest) returns (DeleteCustomerResponse) {
+    option (google.api.http) = {delete: "/v1/customers/{customer_id}"};
+  }
+
+  // ListCustomers returns customers oldest first.
+  rpc ListCustomers(ListCustomersRequest) returns (ListCustomersResponse) {
+    option (google.api.http) = {get: "/v1/customers"};
+  }
+}
+
+// SubscriptionService is the CRUD surface for subscriptions plus the cancel
+// transition. Payment-driven state changes happen in BillingService.ChargeInvoice.
+service SubscriptionService {
+  // buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
   rpc CreateSubscription(CreateSubscriptionRequest) returns (CreateSubscriptionResponse) {
     option (google.api.http) = {
       post: "/v1/subscriptions"
@@ -29,18 +57,62 @@ service BillingService {
     };
   }
 
+  // buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
   rpc GetSubscription(GetSubscriptionRequest) returns (GetSubscriptionResponse) {
     option (google.api.http) = {get: "/v1/subscriptions/{subscription_id}"};
   }
 
+  // UpdateSubscription changes the fields named in update_mask ("plan_id",
+  // "metadata"). Price, interval and state are not editable here: state moves
+  // only through payments and CancelSubscription.
+  rpc UpdateSubscription(UpdateSubscriptionRequest) returns (UpdateSubscriptionResponse) {
+    option (google.api.http) = {
+      patch: "/v1/subscriptions/{subscription_id}"
+      body: "*"
+    };
+  }
+
+  // ListSubscriptions returns subscriptions oldest first, optionally for one
+  // customer.
+  rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse) {
+    option (google.api.http) = {get: "/v1/subscriptions"};
+  }
+
   // CancelSubscription is naturally idempotent: cancelling an already
   // cancelled subscription returns it unchanged.
+  // buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
   rpc CancelSubscription(CancelSubscriptionRequest) returns (CancelSubscriptionResponse) {
     option (google.api.http) = {
       post: "/v1/subscriptions/{subscription_id}:cancel"
       body: "*"
     };
   }
+}
+
+// BillingService moves money through an idempotent charge/refund path backed by
+// a double-entry ledger.
+//
+// Every mutating RPC that touches money (ChargeInvoice, RefundCharge) requires
+// an idempotency_key. Retrying with the same key and the same payload returns
+// the original result; reusing a key with a different payload fails with
+// FAILED_PRECONDITION.
+//
+// CreateCustomer, CreateSubscription, GetSubscription and CancelSubscription
+// are kept here for compatibility and behave exactly like the same-named RPCs
+// on CustomerService and SubscriptionService; their REST routes are served by
+// those services.
+service BillingService {
+  // buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+  rpc CreateCustomer(CreateCustomerRequest) returns (CreateCustomerResponse);
+
+  // buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+  rpc CreateSubscription(CreateSubscriptionRequest) returns (CreateSubscriptionResponse);
+
+  // buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+  rpc GetSubscription(GetSubscriptionRequest) returns (GetSubscriptionResponse);
+
+  // buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+  rpc CancelSubscription(CancelSubscriptionRequest) returns (CancelSubscriptionResponse);
 
   rpc ChargeInvoice(ChargeInvoiceRequest) returns (ChargeInvoiceResponse) {
     option (google.api.http) = {
@@ -123,6 +195,9 @@ message Subscription {
   google.protobuf.Timestamp update_time = 8;
   // Set when state is CANCELED.
   google.protobuf.Timestamp cancel_time = 9;
+  // Free-form labels set by the caller. At most 20 entries, keys up to 64 and
+  // values up to 256 characters.
+  map<string, string> metadata = 10;
 }
 
 message Charge {
@@ -176,6 +251,45 @@ message CreateCustomerResponse {
   Customer customer = 1;
 }
 
+message GetCustomerRequest {
+  string customer_id = 1;
+}
+
+message GetCustomerResponse {
+  Customer customer = 1;
+}
+
+message UpdateCustomerRequest {
+  string customer_id = 1;
+  // New values; only fields named in update_mask are applied.
+  string email = 2;
+  string name = 3;
+  // Required. Allowed paths: "email", "name".
+  google.protobuf.FieldMask update_mask = 4;
+}
+
+message UpdateCustomerResponse {
+  Customer customer = 1;
+}
+
+message DeleteCustomerRequest {
+  string customer_id = 1;
+}
+
+message DeleteCustomerResponse {}
+
+message ListCustomersRequest {
+  // Defaults to 50, maximum 500.
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListCustomersResponse {
+  repeated Customer customers = 1;
+  // Empty on the last page.
+  string next_page_token = 2;
+}
+
 message CreateSubscriptionRequest {
   string customer_id = 1;
   string plan_id = 2;
@@ -193,6 +307,34 @@ message GetSubscriptionRequest {
 
 message GetSubscriptionResponse {
   Subscription subscription = 1;
+}
+
+message UpdateSubscriptionRequest {
+  string subscription_id = 1;
+  // New values; only fields named in update_mask are applied. A "metadata"
+  // update replaces the whole map.
+  string plan_id = 2;
+  map<string, string> metadata = 3;
+  // Required. Allowed paths: "plan_id", "metadata".
+  google.protobuf.FieldMask update_mask = 4;
+}
+
+message UpdateSubscriptionResponse {
+  Subscription subscription = 1;
+}
+
+message ListSubscriptionsRequest {
+  // Optional filter: only this customer's subscriptions.
+  string customer_id = 1;
+  // Defaults to 50, maximum 500.
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListSubscriptionsResponse {
+  repeated Subscription subscriptions = 1;
+  // Empty on the last page.
+  string next_page_token = 2;
 }
 
 message CancelSubscriptionRequest {

@@ -19,6 +19,562 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	CustomerService_CreateCustomer_FullMethodName = "/billing.v1.CustomerService/CreateCustomer"
+	CustomerService_GetCustomer_FullMethodName    = "/billing.v1.CustomerService/GetCustomer"
+	CustomerService_UpdateCustomer_FullMethodName = "/billing.v1.CustomerService/UpdateCustomer"
+	CustomerService_DeleteCustomer_FullMethodName = "/billing.v1.CustomerService/DeleteCustomer"
+	CustomerService_ListCustomers_FullMethodName  = "/billing.v1.CustomerService/ListCustomers"
+)
+
+// CustomerServiceClient is the client API for CustomerService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// CustomerService is the CRUD surface for customers.
+//
+// Delete is protected: a customer that has any subscription or ledger entry
+// cannot be deleted (FAILED_PRECONDITION, reason CUSTOMER_HAS_ACTIVITY), because
+// the ledger is append-only and must keep pointing at a customer.
+type CustomerServiceClient interface {
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+	CreateCustomer(ctx context.Context, in *CreateCustomerRequest, opts ...grpc.CallOption) (*CreateCustomerResponse, error)
+	GetCustomer(ctx context.Context, in *GetCustomerRequest, opts ...grpc.CallOption) (*GetCustomerResponse, error)
+	// UpdateCustomer changes the fields named in update_mask ("name", "email").
+	UpdateCustomer(ctx context.Context, in *UpdateCustomerRequest, opts ...grpc.CallOption) (*UpdateCustomerResponse, error)
+	// DeleteCustomer removes a customer that has no subscriptions and no ledger
+	// entries. Otherwise it fails with FAILED_PRECONDITION.
+	DeleteCustomer(ctx context.Context, in *DeleteCustomerRequest, opts ...grpc.CallOption) (*DeleteCustomerResponse, error)
+	// ListCustomers returns customers oldest first.
+	ListCustomers(ctx context.Context, in *ListCustomersRequest, opts ...grpc.CallOption) (*ListCustomersResponse, error)
+}
+
+type customerServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewCustomerServiceClient(cc grpc.ClientConnInterface) CustomerServiceClient {
+	return &customerServiceClient{cc}
+}
+
+func (c *customerServiceClient) CreateCustomer(ctx context.Context, in *CreateCustomerRequest, opts ...grpc.CallOption) (*CreateCustomerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateCustomerResponse)
+	err := c.cc.Invoke(ctx, CustomerService_CreateCustomer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *customerServiceClient) GetCustomer(ctx context.Context, in *GetCustomerRequest, opts ...grpc.CallOption) (*GetCustomerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCustomerResponse)
+	err := c.cc.Invoke(ctx, CustomerService_GetCustomer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *customerServiceClient) UpdateCustomer(ctx context.Context, in *UpdateCustomerRequest, opts ...grpc.CallOption) (*UpdateCustomerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateCustomerResponse)
+	err := c.cc.Invoke(ctx, CustomerService_UpdateCustomer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *customerServiceClient) DeleteCustomer(ctx context.Context, in *DeleteCustomerRequest, opts ...grpc.CallOption) (*DeleteCustomerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteCustomerResponse)
+	err := c.cc.Invoke(ctx, CustomerService_DeleteCustomer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *customerServiceClient) ListCustomers(ctx context.Context, in *ListCustomersRequest, opts ...grpc.CallOption) (*ListCustomersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListCustomersResponse)
+	err := c.cc.Invoke(ctx, CustomerService_ListCustomers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// CustomerServiceServer is the server API for CustomerService service.
+// All implementations must embed UnimplementedCustomerServiceServer
+// for forward compatibility.
+//
+// CustomerService is the CRUD surface for customers.
+//
+// Delete is protected: a customer that has any subscription or ledger entry
+// cannot be deleted (FAILED_PRECONDITION, reason CUSTOMER_HAS_ACTIVITY), because
+// the ledger is append-only and must keep pointing at a customer.
+type CustomerServiceServer interface {
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+	CreateCustomer(context.Context, *CreateCustomerRequest) (*CreateCustomerResponse, error)
+	GetCustomer(context.Context, *GetCustomerRequest) (*GetCustomerResponse, error)
+	// UpdateCustomer changes the fields named in update_mask ("name", "email").
+	UpdateCustomer(context.Context, *UpdateCustomerRequest) (*UpdateCustomerResponse, error)
+	// DeleteCustomer removes a customer that has no subscriptions and no ledger
+	// entries. Otherwise it fails with FAILED_PRECONDITION.
+	DeleteCustomer(context.Context, *DeleteCustomerRequest) (*DeleteCustomerResponse, error)
+	// ListCustomers returns customers oldest first.
+	ListCustomers(context.Context, *ListCustomersRequest) (*ListCustomersResponse, error)
+	mustEmbedUnimplementedCustomerServiceServer()
+}
+
+// UnimplementedCustomerServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedCustomerServiceServer struct{}
+
+func (UnimplementedCustomerServiceServer) CreateCustomer(context.Context, *CreateCustomerRequest) (*CreateCustomerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateCustomer not implemented")
+}
+func (UnimplementedCustomerServiceServer) GetCustomer(context.Context, *GetCustomerRequest) (*GetCustomerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCustomer not implemented")
+}
+func (UnimplementedCustomerServiceServer) UpdateCustomer(context.Context, *UpdateCustomerRequest) (*UpdateCustomerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateCustomer not implemented")
+}
+func (UnimplementedCustomerServiceServer) DeleteCustomer(context.Context, *DeleteCustomerRequest) (*DeleteCustomerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteCustomer not implemented")
+}
+func (UnimplementedCustomerServiceServer) ListCustomers(context.Context, *ListCustomersRequest) (*ListCustomersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListCustomers not implemented")
+}
+func (UnimplementedCustomerServiceServer) mustEmbedUnimplementedCustomerServiceServer() {}
+func (UnimplementedCustomerServiceServer) testEmbeddedByValue()                         {}
+
+// UnsafeCustomerServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to CustomerServiceServer will
+// result in compilation errors.
+type UnsafeCustomerServiceServer interface {
+	mustEmbedUnimplementedCustomerServiceServer()
+}
+
+func RegisterCustomerServiceServer(s grpc.ServiceRegistrar, srv CustomerServiceServer) {
+	// If the following call panics, it indicates UnimplementedCustomerServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&CustomerService_ServiceDesc, srv)
+}
+
+func _CustomerService_CreateCustomer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateCustomerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CustomerServiceServer).CreateCustomer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CustomerService_CreateCustomer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CustomerServiceServer).CreateCustomer(ctx, req.(*CreateCustomerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CustomerService_GetCustomer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCustomerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CustomerServiceServer).GetCustomer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CustomerService_GetCustomer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CustomerServiceServer).GetCustomer(ctx, req.(*GetCustomerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CustomerService_UpdateCustomer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateCustomerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CustomerServiceServer).UpdateCustomer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CustomerService_UpdateCustomer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CustomerServiceServer).UpdateCustomer(ctx, req.(*UpdateCustomerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CustomerService_DeleteCustomer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteCustomerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CustomerServiceServer).DeleteCustomer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CustomerService_DeleteCustomer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CustomerServiceServer).DeleteCustomer(ctx, req.(*DeleteCustomerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CustomerService_ListCustomers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListCustomersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CustomerServiceServer).ListCustomers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CustomerService_ListCustomers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CustomerServiceServer).ListCustomers(ctx, req.(*ListCustomersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// CustomerService_ServiceDesc is the grpc.ServiceDesc for CustomerService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var CustomerService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "billing.v1.CustomerService",
+	HandlerType: (*CustomerServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "CreateCustomer",
+			Handler:    _CustomerService_CreateCustomer_Handler,
+		},
+		{
+			MethodName: "GetCustomer",
+			Handler:    _CustomerService_GetCustomer_Handler,
+		},
+		{
+			MethodName: "UpdateCustomer",
+			Handler:    _CustomerService_UpdateCustomer_Handler,
+		},
+		{
+			MethodName: "DeleteCustomer",
+			Handler:    _CustomerService_DeleteCustomer_Handler,
+		},
+		{
+			MethodName: "ListCustomers",
+			Handler:    _CustomerService_ListCustomers_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "billing/v1/billing.proto",
+}
+
+const (
+	SubscriptionService_CreateSubscription_FullMethodName = "/billing.v1.SubscriptionService/CreateSubscription"
+	SubscriptionService_GetSubscription_FullMethodName    = "/billing.v1.SubscriptionService/GetSubscription"
+	SubscriptionService_UpdateSubscription_FullMethodName = "/billing.v1.SubscriptionService/UpdateSubscription"
+	SubscriptionService_ListSubscriptions_FullMethodName  = "/billing.v1.SubscriptionService/ListSubscriptions"
+	SubscriptionService_CancelSubscription_FullMethodName = "/billing.v1.SubscriptionService/CancelSubscription"
+)
+
+// SubscriptionServiceClient is the client API for SubscriptionService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// SubscriptionService is the CRUD surface for subscriptions plus the cancel
+// transition. Payment-driven state changes happen in BillingService.ChargeInvoice.
+type SubscriptionServiceClient interface {
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+	CreateSubscription(ctx context.Context, in *CreateSubscriptionRequest, opts ...grpc.CallOption) (*CreateSubscriptionResponse, error)
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+	GetSubscription(ctx context.Context, in *GetSubscriptionRequest, opts ...grpc.CallOption) (*GetSubscriptionResponse, error)
+	// UpdateSubscription changes the fields named in update_mask ("plan_id",
+	// "metadata"). Price, interval and state are not editable here: state moves
+	// only through payments and CancelSubscription.
+	UpdateSubscription(ctx context.Context, in *UpdateSubscriptionRequest, opts ...grpc.CallOption) (*UpdateSubscriptionResponse, error)
+	// ListSubscriptions returns subscriptions oldest first, optionally for one
+	// customer.
+	ListSubscriptions(ctx context.Context, in *ListSubscriptionsRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
+	// CancelSubscription is naturally idempotent: cancelling an already
+	// cancelled subscription returns it unchanged.
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+	CancelSubscription(ctx context.Context, in *CancelSubscriptionRequest, opts ...grpc.CallOption) (*CancelSubscriptionResponse, error)
+}
+
+type subscriptionServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewSubscriptionServiceClient(cc grpc.ClientConnInterface) SubscriptionServiceClient {
+	return &subscriptionServiceClient{cc}
+}
+
+func (c *subscriptionServiceClient) CreateSubscription(ctx context.Context, in *CreateSubscriptionRequest, opts ...grpc.CallOption) (*CreateSubscriptionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateSubscriptionResponse)
+	err := c.cc.Invoke(ctx, SubscriptionService_CreateSubscription_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *subscriptionServiceClient) GetSubscription(ctx context.Context, in *GetSubscriptionRequest, opts ...grpc.CallOption) (*GetSubscriptionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSubscriptionResponse)
+	err := c.cc.Invoke(ctx, SubscriptionService_GetSubscription_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *subscriptionServiceClient) UpdateSubscription(ctx context.Context, in *UpdateSubscriptionRequest, opts ...grpc.CallOption) (*UpdateSubscriptionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateSubscriptionResponse)
+	err := c.cc.Invoke(ctx, SubscriptionService_UpdateSubscription_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *subscriptionServiceClient) ListSubscriptions(ctx context.Context, in *ListSubscriptionsRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSubscriptionsResponse)
+	err := c.cc.Invoke(ctx, SubscriptionService_ListSubscriptions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *subscriptionServiceClient) CancelSubscription(ctx context.Context, in *CancelSubscriptionRequest, opts ...grpc.CallOption) (*CancelSubscriptionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CancelSubscriptionResponse)
+	err := c.cc.Invoke(ctx, SubscriptionService_CancelSubscription_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SubscriptionServiceServer is the server API for SubscriptionService service.
+// All implementations must embed UnimplementedSubscriptionServiceServer
+// for forward compatibility.
+//
+// SubscriptionService is the CRUD surface for subscriptions plus the cancel
+// transition. Payment-driven state changes happen in BillingService.ChargeInvoice.
+type SubscriptionServiceServer interface {
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+	CreateSubscription(context.Context, *CreateSubscriptionRequest) (*CreateSubscriptionResponse, error)
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+	GetSubscription(context.Context, *GetSubscriptionRequest) (*GetSubscriptionResponse, error)
+	// UpdateSubscription changes the fields named in update_mask ("plan_id",
+	// "metadata"). Price, interval and state are not editable here: state moves
+	// only through payments and CancelSubscription.
+	UpdateSubscription(context.Context, *UpdateSubscriptionRequest) (*UpdateSubscriptionResponse, error)
+	// ListSubscriptions returns subscriptions oldest first, optionally for one
+	// customer.
+	ListSubscriptions(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error)
+	// CancelSubscription is naturally idempotent: cancelling an already
+	// cancelled subscription returns it unchanged.
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+	CancelSubscription(context.Context, *CancelSubscriptionRequest) (*CancelSubscriptionResponse, error)
+	mustEmbedUnimplementedSubscriptionServiceServer()
+}
+
+// UnimplementedSubscriptionServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedSubscriptionServiceServer struct{}
+
+func (UnimplementedSubscriptionServiceServer) CreateSubscription(context.Context, *CreateSubscriptionRequest) (*CreateSubscriptionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateSubscription not implemented")
+}
+func (UnimplementedSubscriptionServiceServer) GetSubscription(context.Context, *GetSubscriptionRequest) (*GetSubscriptionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSubscription not implemented")
+}
+func (UnimplementedSubscriptionServiceServer) UpdateSubscription(context.Context, *UpdateSubscriptionRequest) (*UpdateSubscriptionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateSubscription not implemented")
+}
+func (UnimplementedSubscriptionServiceServer) ListSubscriptions(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSubscriptions not implemented")
+}
+func (UnimplementedSubscriptionServiceServer) CancelSubscription(context.Context, *CancelSubscriptionRequest) (*CancelSubscriptionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CancelSubscription not implemented")
+}
+func (UnimplementedSubscriptionServiceServer) mustEmbedUnimplementedSubscriptionServiceServer() {}
+func (UnimplementedSubscriptionServiceServer) testEmbeddedByValue()                             {}
+
+// UnsafeSubscriptionServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to SubscriptionServiceServer will
+// result in compilation errors.
+type UnsafeSubscriptionServiceServer interface {
+	mustEmbedUnimplementedSubscriptionServiceServer()
+}
+
+func RegisterSubscriptionServiceServer(s grpc.ServiceRegistrar, srv SubscriptionServiceServer) {
+	// If the following call panics, it indicates UnimplementedSubscriptionServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&SubscriptionService_ServiceDesc, srv)
+}
+
+func _SubscriptionService_CreateSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateSubscriptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SubscriptionServiceServer).CreateSubscription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SubscriptionService_CreateSubscription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SubscriptionServiceServer).CreateSubscription(ctx, req.(*CreateSubscriptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SubscriptionService_GetSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSubscriptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SubscriptionServiceServer).GetSubscription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SubscriptionService_GetSubscription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SubscriptionServiceServer).GetSubscription(ctx, req.(*GetSubscriptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SubscriptionService_UpdateSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateSubscriptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SubscriptionServiceServer).UpdateSubscription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SubscriptionService_UpdateSubscription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SubscriptionServiceServer).UpdateSubscription(ctx, req.(*UpdateSubscriptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SubscriptionService_ListSubscriptions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSubscriptionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SubscriptionServiceServer).ListSubscriptions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SubscriptionService_ListSubscriptions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SubscriptionServiceServer).ListSubscriptions(ctx, req.(*ListSubscriptionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SubscriptionService_CancelSubscription_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelSubscriptionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SubscriptionServiceServer).CancelSubscription(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SubscriptionService_CancelSubscription_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SubscriptionServiceServer).CancelSubscription(ctx, req.(*CancelSubscriptionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// SubscriptionService_ServiceDesc is the grpc.ServiceDesc for SubscriptionService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var SubscriptionService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "billing.v1.SubscriptionService",
+	HandlerType: (*SubscriptionServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "CreateSubscription",
+			Handler:    _SubscriptionService_CreateSubscription_Handler,
+		},
+		{
+			MethodName: "GetSubscription",
+			Handler:    _SubscriptionService_GetSubscription_Handler,
+		},
+		{
+			MethodName: "UpdateSubscription",
+			Handler:    _SubscriptionService_UpdateSubscription_Handler,
+		},
+		{
+			MethodName: "ListSubscriptions",
+			Handler:    _SubscriptionService_ListSubscriptions_Handler,
+		},
+		{
+			MethodName: "CancelSubscription",
+			Handler:    _SubscriptionService_CancelSubscription_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "billing/v1/billing.proto",
+}
+
+const (
 	BillingService_CreateCustomer_FullMethodName     = "/billing.v1.BillingService/CreateCustomer"
 	BillingService_CreateSubscription_FullMethodName = "/billing.v1.BillingService/CreateSubscription"
 	BillingService_GetSubscription_FullMethodName    = "/billing.v1.BillingService/GetSubscription"
@@ -33,19 +589,26 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// BillingService manages customers and subscriptions and moves money through
-// an idempotent charge/refund path backed by a double-entry ledger.
+// BillingService moves money through an idempotent charge/refund path backed by
+// a double-entry ledger.
 //
 // Every mutating RPC that touches money (ChargeInvoice, RefundCharge) requires
 // an idempotency_key. Retrying with the same key and the same payload returns
 // the original result; reusing a key with a different payload fails with
 // FAILED_PRECONDITION.
+//
+// CreateCustomer, CreateSubscription, GetSubscription and CancelSubscription
+// are kept here for compatibility and behave exactly like the same-named RPCs
+// on CustomerService and SubscriptionService; their REST routes are served by
+// those services.
 type BillingServiceClient interface {
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
 	CreateCustomer(ctx context.Context, in *CreateCustomerRequest, opts ...grpc.CallOption) (*CreateCustomerResponse, error)
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
 	CreateSubscription(ctx context.Context, in *CreateSubscriptionRequest, opts ...grpc.CallOption) (*CreateSubscriptionResponse, error)
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
 	GetSubscription(ctx context.Context, in *GetSubscriptionRequest, opts ...grpc.CallOption) (*GetSubscriptionResponse, error)
-	// CancelSubscription is naturally idempotent: cancelling an already
-	// cancelled subscription returns it unchanged.
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
 	CancelSubscription(ctx context.Context, in *CancelSubscriptionRequest, opts ...grpc.CallOption) (*CancelSubscriptionResponse, error)
 	ChargeInvoice(ctx context.Context, in *ChargeInvoiceRequest, opts ...grpc.CallOption) (*ChargeInvoiceResponse, error)
 	RefundCharge(ctx context.Context, in *RefundChargeRequest, opts ...grpc.CallOption) (*RefundChargeResponse, error)
@@ -145,19 +708,26 @@ func (c *billingServiceClient) GetBalance(ctx context.Context, in *GetBalanceReq
 // All implementations must embed UnimplementedBillingServiceServer
 // for forward compatibility.
 //
-// BillingService manages customers and subscriptions and moves money through
-// an idempotent charge/refund path backed by a double-entry ledger.
+// BillingService moves money through an idempotent charge/refund path backed by
+// a double-entry ledger.
 //
 // Every mutating RPC that touches money (ChargeInvoice, RefundCharge) requires
 // an idempotency_key. Retrying with the same key and the same payload returns
 // the original result; reusing a key with a different payload fails with
 // FAILED_PRECONDITION.
+//
+// CreateCustomer, CreateSubscription, GetSubscription and CancelSubscription
+// are kept here for compatibility and behave exactly like the same-named RPCs
+// on CustomerService and SubscriptionService; their REST routes are served by
+// those services.
 type BillingServiceServer interface {
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
 	CreateCustomer(context.Context, *CreateCustomerRequest) (*CreateCustomerResponse, error)
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
 	CreateSubscription(context.Context, *CreateSubscriptionRequest) (*CreateSubscriptionResponse, error)
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
 	GetSubscription(context.Context, *GetSubscriptionRequest) (*GetSubscriptionResponse, error)
-	// CancelSubscription is naturally idempotent: cancelling an already
-	// cancelled subscription returns it unchanged.
+	// buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
 	CancelSubscription(context.Context, *CancelSubscriptionRequest) (*CancelSubscriptionResponse, error)
 	ChargeInvoice(context.Context, *ChargeInvoiceRequest) (*ChargeInvoiceResponse, error)
 	RefundCharge(context.Context, *RefundChargeRequest) (*RefundChargeResponse, error)

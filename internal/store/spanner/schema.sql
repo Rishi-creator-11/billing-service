@@ -17,8 +17,11 @@ CREATE TABLE Subscriptions (
   state STRING(16) NOT NULL,
   create_time TIMESTAMP NOT NULL,
   update_time TIMESTAMP NOT NULL,
-  cancel_time TIMESTAMP
+  cancel_time TIMESTAMP,
+  metadata STRING(MAX)
 ) PRIMARY KEY (subscription_id);
+
+CREATE INDEX SubscriptionsByCustomer ON Subscriptions(customer_id, create_time, subscription_id);
 
 CREATE TABLE Charges (
   charge_id STRING(36) NOT NULL,

@@ -20,7 +20,9 @@ func ok(context.Context, any) (any, error) { return "ok", nil }
 
 func TestAuth(t *testing.T) {
 	intercept := Auth([]string{"secret", "other"})
-	billing := &grpc.UnaryServerInfo{FullMethod: billingPrefix + "ChargeInvoice"}
+	billing := &grpc.UnaryServerInfo{FullMethod: billingPrefix + "BillingService/ChargeInvoice"}
+	customers := &grpc.UnaryServerInfo{FullMethod: billingPrefix + "CustomerService/DeleteCustomer"}
+	subscriptions := &grpc.UnaryServerInfo{FullMethod: billingPrefix + "SubscriptionService/ListSubscriptions"}
 	health := &grpc.UnaryServerInfo{FullMethod: "/grpc.health.v1.Health/Check"}
 	with := func(kv ...string) context.Context {
 		return metadata.NewIncomingContext(context.Background(), metadata.Pairs(kv...))
@@ -36,6 +38,9 @@ func TestAuth(t *testing.T) {
 		{"missing", context.Background(), billing, codes.Unauthenticated},
 		{"wrong", with("authorization", "Bearer nope"), billing, codes.Unauthenticated},
 		{"prefix of key rejected", with("x-api-key", "secre"), billing, codes.Unauthenticated},
+		{"customer service needs a key", context.Background(), customers, codes.Unauthenticated},
+		{"subscription service needs a key", context.Background(), subscriptions, codes.Unauthenticated},
+		{"customer service with key", with("x-api-key", "other"), customers, codes.OK},
 		{"health is open", context.Background(), health, codes.OK},
 	}
 	for _, tt := range tests {
@@ -77,7 +82,7 @@ func TestRequestIDPropagation(t *testing.T) {
 
 func TestMetricsRecorded(t *testing.T) {
 	m := metrics.New()
-	info := &grpc.UnaryServerInfo{FullMethod: billingPrefix + "ChargeInvoice"}
+	info := &grpc.UnaryServerInfo{FullMethod: billingPrefix + "BillingService/ChargeInvoice"}
 	_, _ = Metrics(m)(context.Background(), nil, info, ok)
 	_, _ = Metrics(m)(context.Background(), nil, info, func(context.Context, any) (any, error) {
 		return nil, status.Error(codes.NotFound, "x")

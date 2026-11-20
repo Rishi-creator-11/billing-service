@@ -102,6 +102,8 @@ func New(ctx context.Context, cfg Config, log *slog.Logger, opts ...Option) (*Se
 
 	s.grpcSrv = grpc.NewServer(serverOpts...)
 	billingv1.RegisterBillingServiceServer(s.grpcSrv, svc)
+	billingv1.RegisterCustomerServiceServer(s.grpcSrv, svc)
+	billingv1.RegisterSubscriptionServiceServer(s.grpcSrv, svc)
 	healthpb.RegisterHealthServer(s.grpcSrv, s.health)
 	reflection.Register(s.grpcSrv)
 
@@ -163,8 +165,17 @@ func (s *Server) gateway(ctx context.Context) (http.Handler, error) {
 	if strings.HasPrefix(target, "[::]") {
 		target = "localhost" + target[len("[::]"):]
 	}
-	err := billingv1.RegisterBillingServiceHandlerFromEndpoint(ctx, mux, target, []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())})
-	return mux, err
+	dial := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	for _, register := range []func(context.Context, *runtime.ServeMux, string, []grpc.DialOption) error{
+		billingv1.RegisterBillingServiceHandlerFromEndpoint,
+		billingv1.RegisterCustomerServiceHandlerFromEndpoint,
+		billingv1.RegisterSubscriptionServiceHandlerFromEndpoint,
+	} {
+		if err := register(ctx, mux, target, dial); err != nil {
+			return nil, err
+		}
+	}
+	return mux, nil
 }
 
 // Addrs returns the bound gRPC, HTTP and admin addresses.
@@ -176,7 +187,9 @@ func (s *Server) Addrs() (grpcAddr, httpAddr, adminAddr string) {
 // the listeners stop accepting, and in-flight requests get ShutdownGrace to finish.
 func (s *Server) Serve(ctx context.Context) error {
 	s.health.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
-	s.health.SetServingStatus(billingv1.BillingService_ServiceDesc.ServiceName, healthpb.HealthCheckResponse_SERVING)
+	for _, desc := range []grpc.ServiceDesc{billingv1.BillingService_ServiceDesc, billingv1.CustomerService_ServiceDesc, billingv1.SubscriptionService_ServiceDesc} {
+		s.health.SetServingStatus(desc.ServiceName, healthpb.HealthCheckResponse_SERVING)
+	}
 
 	g, gctx := errgroup.WithContext(context.Background())
 	serve := func(name string, fn func() error) {

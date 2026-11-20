@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/mail"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +28,8 @@ const (
 
 type Service struct {
 	billingv1.UnimplementedBillingServiceServer
+	billingv1.UnimplementedCustomerServiceServer
+	billingv1.UnimplementedSubscriptionServiceServer
 
 	store   store.Store
 	proc    Processor
@@ -63,109 +64,59 @@ func (s *Service) ro(ctx context.Context, fn func(store.Tx) error) error {
 	return toStatus(ctx, s.log, s.store.ReadOnly(ctx, fn))
 }
 
+// pageSize applies the default and maximum to a requested page size.
+func pageSize(n int32) (int, error) {
+	switch {
+	case n < 0 || n > maxPageSize:
+		return 0, invalid(fmt.Sprintf("page_size must be between 0 and %d", maxPageSize))
+	case n == 0:
+		return defaultPageSize, nil
+	}
+	return int(n), nil
+}
+
+// A page token is the (create time, id) of the last row returned.
+func encodeToken(at time.Time, id string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(at.UTC().Format(time.RFC3339Nano) + "|" + id))
+}
+
+func decodeToken(tok string) (at time.Time, id string, err error) {
+	raw, err := base64.RawURLEncoding.DecodeString(tok)
+	if err != nil {
+		return at, "", err
+	}
+	atStr, id, ok := strings.Cut(string(raw), "|")
+	if !ok || id == "" {
+		return at, "", errors.New("malformed token")
+	}
+	at, err = time.Parse(time.RFC3339Nano, atStr)
+	return at, id, err
+}
+
+func decodeCursor(tok string) (*store.LedgerCursor, error) {
+	if tok == "" {
+		return nil, nil
+	}
+	at, id, err := decodeToken(tok)
+	if err != nil {
+		return nil, err
+	}
+	return &store.LedgerCursor{CreatedAt: at, EntryID: id}, nil
+}
+
+func decodeListCursor(tok string) (*store.ListCursor, error) {
+	if tok == "" {
+		return nil, nil
+	}
+	at, id, err := decodeToken(tok)
+	if err != nil {
+		return nil, err
+	}
+	return &store.ListCursor{CreatedAt: at, ID: id}, nil
+}
+
 func notFound(what, id string) error {
 	return status.Errorf(codes.NotFound, "%s %q not found", what, id)
-}
-
-// ---- customers
-
-func (s *Service) CreateCustomer(ctx context.Context, req *billingv1.CreateCustomerRequest) (*billingv1.CreateCustomerResponse, error) {
-	addr, err := mail.ParseAddress(req.GetEmail())
-	if err != nil || addr.Address != req.GetEmail() {
-		return nil, invalid("email is not a valid address")
-	}
-	if len(req.GetName()) > 255 {
-		return nil, invalid("name must be at most 255 characters")
-	}
-	c := billing.Customer{ID: newID(), Email: strings.ToLower(req.GetEmail()), Name: req.GetName(), CreatedAt: s.clock().UTC()}
-	err = s.rw(ctx, func(tx store.Tx) error { return tx.CreateCustomer(c) })
-	if status.Code(err) == codes.AlreadyExists {
-		return nil, withReason(codes.AlreadyExists, "CUSTOMER_EXISTS", "a customer with email %q already exists", c.Email)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &billingv1.CreateCustomerResponse{Customer: customerPB(c)}, nil
-}
-
-// ---- subscriptions
-
-func (s *Service) CreateSubscription(ctx context.Context, req *billingv1.CreateSubscriptionRequest) (*billingv1.CreateSubscriptionResponse, error) {
-	if req.GetCustomerId() == "" {
-		return nil, invalid("customer_id is required")
-	}
-	if req.GetPlanId() == "" || len(req.GetPlanId()) > 128 {
-		return nil, invalid("plan_id is required and must be at most 128 characters")
-	}
-	price := moneyFromPB(req.GetPrice())
-	if err := price.ValidatePositive(); err != nil {
-		return nil, invalid("price: " + err.Error())
-	}
-	var interval billing.Interval
-	switch req.GetInterval() {
-	case billingv1.BillingInterval_BILLING_INTERVAL_MONTHLY:
-		interval = billing.IntervalMonthly
-	case billingv1.BillingInterval_BILLING_INTERVAL_YEARLY:
-		interval = billing.IntervalYearly
-	default:
-		return nil, invalid("interval must be MONTHLY or YEARLY")
-	}
-	now := s.clock().UTC()
-	sub := billing.Subscription{ID: newID(), CustomerID: req.GetCustomerId(), PlanID: req.GetPlanId(), Price: price,
-		Interval: interval, State: billing.StatePending, CreatedAt: now, UpdatedAt: now}
-	err := s.rw(ctx, func(tx store.Tx) error {
-		if _, err := tx.GetCustomer(sub.CustomerID); err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				return notFound("customer", sub.CustomerID)
-			}
-			return err
-		}
-		return tx.CreateSubscription(sub)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &billingv1.CreateSubscriptionResponse{Subscription: subscriptionPB(sub)}, nil
-}
-
-func (s *Service) GetSubscription(ctx context.Context, req *billingv1.GetSubscriptionRequest) (*billingv1.GetSubscriptionResponse, error) {
-	var sub billing.Subscription
-	err := s.ro(ctx, func(tx store.Tx) (err error) {
-		if sub, err = tx.GetSubscription(req.GetSubscriptionId()); errors.Is(err, store.ErrNotFound) {
-			return notFound("subscription", req.GetSubscriptionId())
-		}
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &billingv1.GetSubscriptionResponse{Subscription: subscriptionPB(sub)}, nil
-}
-
-func (s *Service) CancelSubscription(ctx context.Context, req *billingv1.CancelSubscriptionRequest) (*billingv1.CancelSubscriptionResponse, error) {
-	var sub billing.Subscription
-	err := s.rw(ctx, func(tx store.Tx) (err error) {
-		if sub, err = tx.GetSubscription(req.GetSubscriptionId()); err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				return notFound("subscription", req.GetSubscriptionId())
-			}
-			return err
-		}
-		if sub.State == billing.StateCanceled {
-			return nil // already cancelled: retrying is a no-op
-		}
-		next, err := billing.Next(sub.State, billing.EventCancel)
-		if err != nil {
-			return err
-		}
-		now := s.clock().UTC()
-		sub.State, sub.UpdatedAt, sub.CanceledAt = next, now, &now
-		return tx.UpdateSubscription(sub)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &billingv1.CancelSubscriptionResponse{Subscription: subscriptionPB(sub)}, nil
 }
 
 // ---- charges
@@ -349,12 +300,9 @@ func (s *Service) RefundCharge(ctx context.Context, req *billingv1.RefundChargeR
 // ---- ledger
 
 func (s *Service) GetLedger(ctx context.Context, req *billingv1.GetLedgerRequest) (*billingv1.GetLedgerResponse, error) {
-	size := int(req.GetPageSize())
-	switch {
-	case size < 0 || size > maxPageSize:
-		return nil, invalid(fmt.Sprintf("page_size must be between 0 and %d", maxPageSize))
-	case size == 0:
-		size = defaultPageSize
+	size, err := pageSize(req.GetPageSize())
+	if err != nil {
+		return nil, err
 	}
 	cursor, err := decodeCursor(req.GetPageToken())
 	if err != nil {
@@ -378,35 +326,12 @@ func (s *Service) GetLedger(ctx context.Context, req *billingv1.GetLedgerRequest
 	if len(entries) > size {
 		entries = entries[:size]
 		last := entries[len(entries)-1]
-		resp.NextPageToken = encodeCursor(store.LedgerCursor{CreatedAt: last.CreatedAt, EntryID: last.ID})
+		resp.NextPageToken = encodeToken(last.CreatedAt, last.ID)
 	}
 	for _, e := range entries {
 		resp.Entries = append(resp.Entries, entryPB(e))
 	}
 	return resp, nil
-}
-
-func encodeCursor(c store.LedgerCursor) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(c.CreatedAt.UTC().Format(time.RFC3339Nano) + "|" + c.EntryID))
-}
-
-func decodeCursor(tok string) (*store.LedgerCursor, error) {
-	if tok == "" {
-		return nil, nil
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(tok)
-	if err != nil {
-		return nil, err
-	}
-	at, id, ok := strings.Cut(string(raw), "|")
-	if !ok || id == "" {
-		return nil, errors.New("malformed token")
-	}
-	t, err := time.Parse(time.RFC3339Nano, at)
-	if err != nil {
-		return nil, err
-	}
-	return &store.LedgerCursor{CreatedAt: t, EntryID: id}, nil
 }
 
 func (s *Service) GetBalance(ctx context.Context, req *billingv1.GetBalanceRequest) (*billingv1.GetBalanceResponse, error) {

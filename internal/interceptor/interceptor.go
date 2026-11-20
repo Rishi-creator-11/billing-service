@@ -25,7 +25,7 @@ import (
 
 const (
 	requestIDHeader = "x-request-id"
-	billingPrefix   = "/billing.v1.BillingService/"
+	billingPrefix   = "/billing.v1."
 )
 
 type ctxKey struct{}
@@ -151,7 +151,7 @@ func Metrics(m *metrics.Metrics) grpc.UnaryServerInterceptor {
 }
 
 // Auth checks a static API key from the "authorization: Bearer <key>" or
-// "x-api-key" metadata. Only billing.v1.BillingService methods require it;
+// "x-api-key" metadata. Every billing.v1 service (billing, customers, subscriptions) requires it;
 // the health and reflection services are open.
 func Auth(keys []string) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {

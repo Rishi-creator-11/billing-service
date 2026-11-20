@@ -5,7 +5,9 @@ package memory
 
 import (
 	"context"
+	"maps"
 	"sort"
+	"time"
 
 	"github.com/Rishi-creator-11/billing-service/internal/billing"
 	"github.com/Rishi-creator-11/billing-service/internal/store"
@@ -110,6 +112,90 @@ func (t *tx) GetCustomer(id string) (billing.Customer, error) {
 	return c, nil
 }
 
+func (t *tx) UpdateCustomer(c billing.Customer) error {
+	if err := t.guard(); err != nil {
+		return err
+	}
+	old, ok := t.s.customers[c.ID]
+	if !ok {
+		return store.ErrNotFound
+	}
+	if owner, taken := t.s.emails[c.Email]; taken && owner != c.ID {
+		return store.ErrAlreadyExists
+	}
+	delete(t.s.emails, old.Email)
+	t.s.emails[c.Email] = c.ID
+	t.s.customers[c.ID] = c
+	t.undo = append(t.undo, func() {
+		delete(t.s.emails, c.Email)
+		t.s.emails[old.Email] = old.ID
+		t.s.customers[old.ID] = old
+	})
+	return nil
+}
+
+func (t *tx) DeleteCustomer(id string) error {
+	if err := t.guard(); err != nil {
+		return err
+	}
+	old, ok := t.s.customers[id]
+	if !ok {
+		return store.ErrNotFound
+	}
+	delete(t.s.customers, id)
+	delete(t.s.emails, old.Email)
+	t.undo = append(t.undo, func() { t.s.customers[id] = old; t.s.emails[old.Email] = id })
+	return nil
+}
+
+func (t *tx) ListCustomers(after *store.ListCursor, limit int) ([]billing.Customer, error) {
+	out := make([]billing.Customer, 0, len(t.s.customers))
+	for _, c := range t.s.customers {
+		out = append(out, c)
+	}
+	sort.Slice(out, func(i, j int) bool { return before(out[i].CreatedAt, out[i].ID, out[j].CreatedAt, out[j].ID) })
+	if after != nil {
+		i := sort.Search(len(out), func(i int) bool { return before(after.CreatedAt, after.ID, out[i].CreatedAt, out[i].ID) })
+		out = out[i:]
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (t *tx) ListSubscriptions(customerID string, after *store.ListCursor, limit int) ([]billing.Subscription, error) {
+	var out []billing.Subscription
+	for _, sub := range t.s.subscriptions {
+		if customerID == "" || sub.CustomerID == customerID {
+			out = append(out, cloneSub(sub))
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return before(out[i].CreatedAt, out[i].ID, out[j].CreatedAt, out[j].ID) })
+	if after != nil {
+		i := sort.Search(len(out), func(i int) bool { return before(after.CreatedAt, after.ID, out[i].CreatedAt, out[i].ID) })
+		out = out[i:]
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+// cloneSub copies the metadata map so callers and the store never share it.
+func cloneSub(s billing.Subscription) billing.Subscription {
+	s.Metadata = maps.Clone(s.Metadata)
+	return s
+}
+
+// before reports whether (at, aid) sorts strictly before (bt, bid).
+func before(at time.Time, aid string, bt time.Time, bid string) bool {
+	if !at.Equal(bt) {
+		return at.Before(bt)
+	}
+	return aid < bid
+}
+
 func (t *tx) CreateSubscription(sub billing.Subscription) error {
 	if err := t.guard(); err != nil {
 		return err
@@ -117,7 +203,7 @@ func (t *tx) CreateSubscription(sub billing.Subscription) error {
 	if _, ok := t.s.subscriptions[sub.ID]; ok {
 		return store.ErrAlreadyExists
 	}
-	t.s.subscriptions[sub.ID] = sub
+	t.s.subscriptions[sub.ID] = cloneSub(sub)
 	t.undo = append(t.undo, func() { delete(t.s.subscriptions, sub.ID) })
 	return nil
 }
@@ -127,7 +213,7 @@ func (t *tx) GetSubscription(id string) (billing.Subscription, error) {
 	if !ok {
 		return sub, store.ErrNotFound
 	}
-	return sub, nil
+	return cloneSub(sub), nil
 }
 
 func (t *tx) UpdateSubscription(sub billing.Subscription) error {
@@ -138,7 +224,7 @@ func (t *tx) UpdateSubscription(sub billing.Subscription) error {
 	if !ok {
 		return store.ErrNotFound
 	}
-	t.s.subscriptions[sub.ID] = sub
+	t.s.subscriptions[sub.ID] = cloneSub(sub)
 	t.undo = append(t.undo, func() { t.s.subscriptions[sub.ID] = old })
 	return nil
 }
